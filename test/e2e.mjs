@@ -22,7 +22,7 @@ const server = createServer(async (req, res) => {
 const base = `http://localhost:${server.address().port}/`;
 
 const browser = await pw.chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, permissions: ['clipboard-read', 'clipboard-write'] });
 const page = await ctx.newPage();
 const problems = [];
 page.on('pageerror', e => problems.push(e.message));
@@ -76,10 +76,17 @@ assert.ok(await page.isVisible('#over'), 'the game-over card shows after nine ba
 assert.equal(await page.locator('#tally span').count(), 9, 'it lists all nine balls');
 const score = await page.evaluate(() => rollUp.score);
 assert.ok(score >= 8 * 20, `eight rolls at 305 should score well (got ${score})`);
+// one ball of the nine was golden, and it scored double
+const balls = await page.evaluate(() => rollUp.game.balls);
+assert.equal(balls.filter(b => b.golden).length, 1, 'one golden ball a game');
+for (const b of balls) assert.equal(b.points, b.value * (b.golden ? 2 : 1), 'the golden ball scores double, the rest as they land');
+assert.equal(score, balls.reduce((t, b) => t + b.points, 0));
+assert.equal(await page.locator('#tally .golden').count(), 1, 'the golden ball stands out in the tally');
 const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('roll-up.v1')));
 assert.equal(stored.tickets, Math.floor(score / 10), 'a ticket for every 10 points');
 assert.equal(stored.best, score);
-await page.waitForFunction(t => document.getElementById('won').textContent === String(t), stored.tickets, { timeout: 5000 });
+await page.waitForFunction(t => document.getElementById('won').textContent === String(t), stored.tickets, { timeout: 8000 });
+assert.ok(await page.evaluate(() => document.getElementById('strip').offsetHeight > 20), 'the tickets feed out of the slot');
 
 // The prize counter: buy the cheapest thing, and it goes on the shelf.
 await page.click('#overPrizes');
@@ -97,6 +104,42 @@ await page.reload();
 await page.evaluate(() => document.fonts.ready);
 assert.match(await page.textContent('#titleBest'), new RegExp(`Best: ${score}`));
 assert.equal(await page.textContent('#tix'), String(stored.tickets - 5));
+
+// Today's card: nine called shots. Rolling at each call's speed hits most of them.
+await page.click('#daily');
+assert.equal(await mode(), 'aim');
+const card = await page.evaluate(() => rollUp.game.card);
+assert.equal(card.calls.length, 9);
+assert.ok(await page.isVisible('#callNote'), 'the called hole is shown before rolling');
+assert.equal(await page.textContent('#callV'), String(card.calls[0]));
+const SPEED = { 20: [0, 250], 30: [0, 280], 40: [0, 305], 50: [0, 332], 100: [26, 374] };
+await page.evaluate(() => { rollUp.speed = 6; });
+for (let i = 0; i < 9; i++) {
+  await page.waitForFunction(() => rollUp.mode === 'aim', null, { timeout: 15000 });
+  if (i === card.golden) assert.ok(await page.isVisible('#goldNote'), 'the golden ball is pointed out when it comes up');
+  const [vx, vz] = SPEED[card.calls[i]];
+  await page.evaluate(([vx, vz]) => rollUp.roll(vx, vz, 0), [vx, vz]);
+}
+await page.waitForFunction(() => rollUp.mode === 'over', null, { timeout: 30000 });
+await page.evaluate(() => { rollUp.speed = 1; });
+const daily = await page.evaluate(() => rollUp.saved.daily);
+assert.equal(daily.key, card.key);
+const called = daily.balls.filter(b => b.hit).length;
+assert.ok(called >= 5, `rolling for each call should hit most of them (hit ${called})`);
+for (const b of daily.balls) assert.equal(b.points, b.value * (b.hit ? 2 : 1) * (b.golden ? 2 : 1));
+assert.ok(await page.isVisible('#stars'));
+assert.match(await page.textContent('#stars'), new RegExp(`${called} of 9 calls`));
+await page.click('#share');
+const shared = await page.evaluate(() => navigator.clipboard.readText());
+assert.match(shared, new RegExp(`^Roll Up · .+ · ${daily.score}\n[★☆]{9}\nroll-up.junkdrawer.works$`), `the share line: ${shared}`);
+
+// Once it's played, today's card shows how it went instead of starting again.
+await page.reload();
+await page.evaluate(() => document.fonts.ready);
+assert.equal(await page.textContent('#daily'), `Today: ${daily.score}`);
+await page.click('#daily');
+assert.ok(await page.isVisible('#over'), 'today’s result shows again');
+assert.equal(await mode(), 'title', 'and no new game starts');
 
 // The keyboard: Enter to play, hold Space to wind up, let go to roll.
 await page.keyboard.press('Enter');

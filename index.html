@@ -36,16 +36,24 @@
       <button type="button" class="menu" id="menuBtn" aria-label="Menu"><span></span><span></span><span></span></button>
     </div>
   </header>
-  <p class="hint" id="hint" hidden>Drag the ball, then flick it up the lane</p>
+  <div class="notes">
+    <p class="hint" id="hint" hidden>Drag the ball, then flick it up the lane</p>
+    <p class="note call" id="callNote" hidden>Called: <b id="callV">40</b> <span>double if it drops there</span></p>
+    <p class="note gold" id="goldNote" hidden>Golden ball <span>double points</span></p>
+  </div>
   <p class="upright" aria-hidden="true">Roll Up plays best with your phone upright</p>
   <p class="sr" id="live" aria-live="polite"></p>
 
   <section class="card" id="title">
     <div class="marquee"><h1>Roll Up</h1></div>
     <p class="lede">Skee-ball, the boardwalk kind. Nine balls a game, and a ticket for every 10 points.</p>
-    <p class="how">Drag the ball where you want it and flick it up the lane. It hops the ramp and drops into a ring. Harder isn't better: the 50 wants a medium roll, and the 100s want an angle.</p>
+    <p class="how">Drag the ball where you want it and flick it up the lane. It hops the ramp and drops into a ring. Harder isn't better: the 50 wants a medium roll, and the 100s want an angle. One ball in every game is golden, and scores double.</p>
     <div class="row">
       <button type="button" class="big" id="play">Play</button>
+      <button type="button" class="big alt" id="daily">Today's card</button>
+    </div>
+    <p class="daily-how" id="dailyHow">Nine called shots, the same for everyone today. Hit the call for double.</p>
+    <div class="row">
       <button type="button" class="plain" id="toPrizes"><svg><use href="#ticket"/></svg>Prize counter</button>
     </div>
     <p class="best" id="titleBest"></p>
@@ -59,8 +67,15 @@
   <section class="card" id="over" hidden>
     <h2 id="overT">Nine balls, 0 points</h2>
     <p class="tally" id="tally" aria-label="Each ball's score"></p>
-    <p class="won"><svg><use href="#ticket"/></svg><b id="won">0</b> <span id="wonWord">tickets</span></p>
+    <p class="stars" id="stars" hidden></p>
+    <div class="payout">
+      <div class="dispenser" aria-hidden="true"><span class="mouth"></span><span class="strip" id="strip"></span></div>
+      <p class="won"><b id="won">0</b> <span id="wonWord">tickets</span></p>
+    </div>
     <p class="best" id="overBest"></p>
+    <div class="row">
+      <button type="button" class="plain" id="share" hidden>Share today's card</button>
+    </div>
     <div class="row">
       <button type="button" class="big" id="again">Roll again</button>
       <button type="button" class="plain" id="overPrizes"><svg><use href="#ticket"/></svg>Prize counter</button>
@@ -95,8 +110,8 @@
       <h3>Trade your tickets</h3>
       <div class="grid" id="grid"></div>
     </div>
-    <p class="toast" id="toast" hidden></p>
   </section>
+  <p class="toast" id="toast" hidden></p>
 
   <noscript><p class="noscript">Roll Up needs JavaScript to roll the ball.</p></noscript>
   <script type="module" src="js/app.js"></script>

@@ -5,6 +5,7 @@ import * as phys from './physics.js';
 import { createScene } from './scene.js';
 import * as sound from './sound.js';
 import { PRIZES, ticketsFor } from './prizes.js';
+import { dayKey, dayBefore, cardFor, points, shareLine } from './daily.js';
 
 const $ = id => document.getElementById(id);
 const KEY = 'roll-up.v1';
@@ -49,7 +50,8 @@ if (document.fonts) document.fonts.load('400 20px Bungee').then(() => scene.repa
 
 // ---------- the game ----------
 let mode = 'title';          // title → aim ⇄ drag → roll → result → (deal → aim) … → over
-let game = { thrown: 0, score: 0, balls: [] };
+// balls: what each ball did, { value, points, golden, call, hit }. card: today's card, for a daily game.
+let game = { thrown: 0, score: 0, balls: [], golden: -1, card: null };
 let ball = phys.newBall(0);
 let handX = 0;
 let shown = 0;               // the score on the board, counting up to game.score
@@ -60,10 +62,13 @@ const pops = [];
 let flash = null;
 const lights = { mode: 'idle', t: 0 };
 
-function newGame() {
-  game = { thrown: 0, score: 0, balls: [] };
+function newGame(daily = false) {
+  const card = daily ? cardFor(dayKey()) : null;
+  // one ball of the nine is golden: today's card says which, otherwise it's a surprise
+  game = { thrown: 0, score: 0, balls: [], card, golden: card ? card.golden : Math.floor(Math.random() * BALLS) };
   shown = 0;
   ball = phys.newBall(handX);
+  ball.golden = game.golden === 0;
   pops.length = 0; flash = null;
   lights.mode = 'idle';
   mode = 'aim';
@@ -74,6 +79,25 @@ function trayCount() {
   if (mode === 'title') return BALLS - 1;
   if (mode === 'result' || mode === 'over') return BALLS - game.thrown;
   return BALLS - game.thrown - 1;
+}
+// Which tray spot holds the golden ball, if it's still waiting. The next ball is the last spot in the row.
+function trayGold() {
+  if (mode === 'title') return -1;
+  const n = trayCount(), first = mode === 'result' || mode === 'over' ? game.thrown : game.thrown + 1;
+  const i = n - 1 - (game.golden - first);
+  return i >= 0 && i < n ? i : -1;
+}
+const callNow = () => (game.card && ['aim', 'drag', 'roll', 'deal'].includes(mode) ? game.card.calls[game.thrown] : null);
+
+// What a ball that dropped into `value` is worth this time, and what the pop-up says about it.
+function worth(value) {
+  const call = game.card ? game.card.calls[game.thrown] : null;
+  const w = points(value, { call, golden: ball.golden });
+  const why = [w.hit && 'called', ball.golden && value && 'golden'].filter(Boolean);
+  w.call = call;
+  w.sub = why.length === 2 ? 'called + gold ×4' : why.length ? `${why[0]} ×2` : null;
+  w.subColor = w.hit ? '#5ee6d8' : '#ffd36a';
+  return w;
 }
 
 function throwBall(vx, vz) {
@@ -87,20 +111,22 @@ function throwBall(vx, vz) {
 // The ball is done: it dropped in a hole, fell in the trough, or didn't make the jump.
 function scored() {
   const v = ball.value;
-  game.score += v;
-  game.thrown++;
-  game.balls.push(v);
+  const w = worth(v);
   if (!ball.hole) {
     // a hole already rang its bell and showed its number as the ball dropped in
     const at = ball.why === 'short'
       ? { x: ball.x, y: phys.ground(LANE.foul + 30) + 8, z: LANE.foul + 30 }
       : { x: ball.x, y: phys.BOARD.y0 + 4, z: phys.JUMP.z1 + 8 };
-    pops.push({ text: v ? '+' + v : 'No jump', ...at, age: 0, big: false });
+    pops.push({ text: v ? '+' + w.points : 'No jump', sub: w.sub, subColor: w.subColor, ...at, age: 0, big: false });
     sound.score(v);
     lights.mode = 'score'; lights.t = 0;
   }
+  game.score += w.points;
+  game.balls.push({ value: v, points: w.points, golden: !!ball.golden, call: w.call, hit: w.hit });
+  game.thrown++;
   const left = BALLS - game.thrown;
-  $('live').textContent = `${v} points. ${game.score} so far, ${left ? left + (left === 1 ? ' ball' : ' balls') + ' left' : 'game over'}.`;
+  const extra = w.hit ? ', the called shot' : '';
+  $('live').textContent = `${w.points} points${extra}. ${game.score} so far, ${left ? left + (left === 1 ? ' ball' : ' balls') + ' left' : 'game over'}.`;
   mode = 'result';
   resultT = 0;
   hud();
@@ -108,17 +134,19 @@ function scored() {
 
 function intoHole(hole) {
   const p = phys.fromBoard(hole.u, hole.s, 3);
-  pops.push({ text: '+' + hole.value, ...p, age: 0, big: hole.value >= 50 });
+  const w = worth(hole.value);
+  pops.push({ text: '+' + w.points, sub: w.sub, subColor: w.subColor, ...p, age: 0, big: w.points >= 50 });
   flash = { hole, t: 0 };
   sound.drop();
-  sound.score(hole.value);
-  lights.mode = hole.value === 100 ? 'win' : 'score'; lights.t = 0;
+  sound.score(w.hit || ball.golden ? Math.max(50, hole.value) : hole.value);
+  lights.mode = hole.value === 100 || w.hit ? 'win' : 'score'; lights.t = 0;
   if (navigator.vibrate) try { navigator.vibrate(hole.value >= 50 ? [18, 40, 18] : 12); } catch { /* not allowed */ }
 }
 
 function nextBall() {
   const from = scene.traySpot(BALLS - game.thrown - 1);
   ball = phys.newBall(handX);
+  ball.golden = game.golden === game.thrown;
   deal = { t: 0, from, to: { x: ball.x, y: ball.y, z: ball.z } };
   ball.x = from.x; ball.y = from.y; ball.z = from.z;
   mode = 'deal';
@@ -129,34 +157,71 @@ function gameOver() {
   mode = 'over';
   const won = ticketsFor(game.score);
   const first = saved.games === 0;
-  const isBest = game.score > saved.best;
+  const result = { score: game.score, balls: game.balls, won };
   saved.tickets += won; saved.games++;
-  if (isBest) saved.best = game.score;
+  if (game.card) {
+    // today's card: kept for the title card and the share line, with the run of days played
+    const key = game.card.key, prev = saved.daily;
+    result.key = key;
+    result.streak = prev && prev.key === dayBefore(key) ? (prev.streak || 1) + 1 : 1;
+    saved.daily = result;
+  } else {
+    result.isBest = game.score > saved.best && !first;
+    if (game.score > saved.best) saved.best = game.score;
+  }
   save();
-  $('overT').textContent = `Nine balls, ${game.score} points`;
-  $('tally').replaceChildren(...game.balls.map(v => {
+  dailyButton();
+  showOver(result, true);
+  if (result.isBest) { lights.mode = 'win'; lights.t = 0; }
+  sound.fanfare();
+}
+
+// The game-over card, for a game just finished (the tickets feed out) or for today's card played earlier.
+let feeding = 0;
+function showOver(r, fresh) {
+  const daily = !!r.key;
+  $('overT').textContent = daily ? `Today's card, ${r.score} points` : `Nine balls, ${r.score} points`;
+  $('tally').replaceChildren(...r.balls.map(b => {
     const c = document.createElement('span');
-    c.textContent = v;
-    if (v >= 50) c.className = 'hi';
+    c.textContent = b.points;
+    c.className = [b.golden && 'golden', b.hit && 'called', !b.golden && b.value >= 50 && 'hi'].filter(Boolean).join(' ');
+    c.title = [b.hit && 'called shot', b.golden && 'golden ball'].filter(Boolean).join(', ');
     return c;
   }));
-  $('overBest').textContent = isBest && !first ? 'A new best.' : `Best: ${saved.best}`;
-  $('wonWord').textContent = won === 1 ? 'ticket' : 'tickets';
+  $('stars').hidden = !daily;
+  if (daily) {
+    const hits = r.balls.filter(b => b.hit).length;
+    $('stars').innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = r.balls.map(x => (x.hit ? '★' : '☆')).join('');
+    $('stars').append(b, `${hits} of 9 calls${r.streak > 1 ? ` · ${r.streak} days in a row` : ''}`);
+  }
+  $('overBest').textContent = daily ? 'A new card comes at midnight.' : r.isBest ? 'A new best.' : `Best: ${saved.best}`;
+  $('share').hidden = !daily;
+  $('again').textContent = daily ? 'Play' : 'Roll again';
+  $('wonWord').textContent = r.won === 1 ? 'ticket' : 'tickets';
   $('over').hidden = false;
-  if (isBest && !first) { lights.mode = 'win'; lights.t = 0; }
-  sound.fanfare();
-  // the tickets come out of the machine one by one
+  $('title').hidden = true;
+  // the tickets come out of the slot one by one, and the strip grows
+  const strip = $('strip');
+  const show = n => {
+    $('won').textContent = n;
+    strip.style.height = Math.min(n, 7) * 22 + (n ? 4 : 0) + 'px';
+    strip.style.backgroundPositionY = n * 22 + 'px';
+  };
+  clearTimeout(feeding);
+  if (!fresh) { show(r.won); return; }
   let n = 0;
-  $('won').textContent = '0';
+  show(0);
   const step = () => {
     if (mode !== 'over') return;
-    n = Math.min(won, n + Math.max(1, Math.round(won / 30)));
-    $('won').textContent = n;
+    n = Math.min(r.won, n + Math.max(1, Math.round(r.won / 40)));
+    show(n);
     sound.ticket();
-    if (n < won) setTimeout(step, 45);
+    if (n < r.won) feeding = setTimeout(step, 55);
     else hud();
   };
-  setTimeout(step, 500);
+  feeding = setTimeout(step, 500);
   $('again').focus({ preventScroll: true });
 }
 
@@ -167,6 +232,11 @@ function hud() {
   $('ballNo').textContent = mode === 'over' ? 'Game over' : `Ball ${Math.min(BALLS, Math.max(1, n))} of ${BALLS}`;
   $('tix').textContent = saved.tickets;
   $('hint').hidden = !(mode === 'aim' && !thrownOnce);
+  const ready = ['aim', 'drag', 'deal'].includes(mode);
+  const call = callNow();
+  $('callNote').hidden = !(ready && call);
+  if (call) $('callV').textContent = call;
+  $('goldNote').hidden = !(ready && ball.golden);
 }
 
 // ---------- flicking the ball ----------
@@ -256,14 +326,42 @@ addEventListener('keyup', e => {
 });
 
 // ---------- cards ----------
-function start() {
+function start(daily = false) {
   sound.unlock();
   $('title').hidden = true;
   $('over').hidden = true;
-  newGame();
+  newGame(daily);
 }
-$('play').addEventListener('click', start);
-$('again').addEventListener('click', start);
+$('play').addEventListener('click', () => start());
+$('again').addEventListener('click', () => start());
+
+// Today's card: play it once a day; after that the button shows how it went.
+function dailyButton() {
+  const d = saved.daily, done = d && d.key === dayKey();
+  $('daily').classList.toggle('done', !!done);
+  $('daily').textContent = done ? `Today: ${d.score}` : "Today's card";
+  $('dailyHow').textContent = done
+    ? `${d.balls.filter(b => b.hit).length} of 9 calls${d.streak > 1 ? `, ${d.streak} days in a row` : ''}. A new card comes at midnight.`
+    : 'Nine called shots, the same for everyone today. Hit the call for double.';
+}
+$('daily').addEventListener('click', () => {
+  sound.unlock();
+  const d = saved.daily;
+  if (d && d.key === dayKey()) showOver(d, false);
+  else start(true);
+});
+dailyButton();
+
+$('share').addEventListener('click', async () => {
+  const d = saved.daily;
+  if (!d) return;
+  const text = shareLine(d.key, d.score, d.balls.map(b => b.hit));
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(text); toast('Copied. Paste it anywhere.'); }
+  catch { toast(text.replace(/\n/g, '  ')); }
+});
 
 function toggleMenu(open = $('menu').hidden) {
   $('menu').hidden = !open;
@@ -272,7 +370,7 @@ function toggleMenu(open = $('menu').hidden) {
 }
 $('menuBtn').addEventListener('click', () => { sound.unlock(); toggleMenu(); });
 $('resume').addEventListener('click', () => toggleMenu(false));
-$('restart').addEventListener('click', () => { toggleMenu(false); newGame(); });
+$('restart').addEventListener('click', () => { toggleMenu(false); newGame(!!game.card); });
 $('sound').addEventListener('click', () => {
   saved.sound = !saved.sound; save();
   sound.setEnabled(saved.sound);
@@ -359,7 +457,7 @@ function tick(now) {
   last = now;
   if (!paused) update(dt);
   scene.frame({
-    ball, tray: trayCount(), pops, flash, lights, now, zoom: zoom * zoom * (3 - 2 * zoom),
+    ball, tray: trayCount(), trayGold: trayGold(), call: callNow(), pops, flash, lights, now, zoom: zoom * zoom * (3 - 2 * zoom),
     charge: charge && mode === 'aim' ? chargeLevel() : null,
   });
   requestAnimationFrame(tick);
@@ -413,6 +511,7 @@ window.rollUp = {
   get thrown() { return game.thrown; },
   get ball() { return ball; },
   get saved() { return saved; },
+  get game() { return game; },
   start,
   roll(vx, vz, x) {
     if (mode !== 'aim') return false;

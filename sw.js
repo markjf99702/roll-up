@@ -2,11 +2,11 @@
 // Anything the person saves lives in localStorage, not here.
 // Network first, so a new version shows up as soon as you're online.
 
-const CACHE = 'roll-up-v1'; // bump the number when the file list changes
+const CACHE = 'roll-up-v2'; // bump the number when the file list changes
 const SHELL = [
   './', 'index.html', 'icon.svg', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png',
   'css/app.css', 'fonts/bungee.woff2', 'fonts/figtree.woff2',
-  'js/app.js', 'js/physics.js', 'js/scene.js', 'js/sound.js', 'js/prizes.js',
+  'js/app.js', 'js/physics.js', 'js/scene.js', 'js/sound.js', 'js/prizes.js', 'js/daily.js',
 ];
 
 self.addEventListener('install', e => {

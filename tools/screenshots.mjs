@@ -35,6 +35,9 @@ async function open(viewport, deviceScaleFactor, saved = SAVED) {
   await page.addInitScript(([seed, saved]) => {
     let a = seed; // mulberry32
     Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    // always the same day, so today's card is always the same card
+    const Real = Date, fixed = new Real(2026, 9, 18, 10).getTime();
+    window.Date = class extends Real { constructor(...a) { super(...(a.length ? a : [fixed])); } static now() { return fixed; } };
     try { localStorage.setItem('roll-up.v1', JSON.stringify(saved)); } catch { }
   }, [SEED, saved]);
   await page.goto(base);
@@ -44,8 +47,8 @@ async function open(viewport, deviceScaleFactor, saved = SAVED) {
 }
 
 // Plays some balls quickly, so the scoreboard and the tray look like a game in progress.
-async function play(page, rolls) {
-  await page.evaluate(() => { rollUp.start(); rollUp.speed = 8; });
+async function play(page, rolls, daily = false) {
+  await page.evaluate(daily => { rollUp.start(daily); rollUp.speed = 8; }, daily);
   for (const [vx, vz, x] of rolls) {
     await page.waitForFunction(() => rollUp.mode === 'aim');
     await page.evaluate(([vx, vz, x]) => rollUp.roll(vx, vz, x), [vx, vz, x]);
@@ -55,10 +58,11 @@ async function play(page, rolls) {
   await page.waitForTimeout(1200); // the score counts up and the lights settle
 }
 
-// The lane, a few balls into a game.
+// The lane on today's card, three balls in: the 100 is called and the golden ball is up.
+// (On 18 October 2026 the card calls 30, 20, 40, 100, … and ball 4 is golden.)
 {
   const page = await open({ width: 390, height: 844 }, 2);
-  await play(page, [[0, 250, 0], [0, 332, 0], [0, 280, 0], [0, 305, 0]]);
+  await play(page, [[0, 280, 0], [0, 250, 0], [0, 305, 0]], true);
   await page.screenshot({ path: join(root, 'docs/phone-lane.png') });
   await page.context().close();
 }
@@ -73,6 +77,18 @@ let board = null;
   await page.waitForTimeout(260);
   await page.screenshot({ path: join(root, 'docs/phone-board.png') });
   board = await page.screenshot({ clip: { x: 0, y: 54, width: 390, height: 560 } });
+  await page.context().close();
+}
+
+// The end of today's card: the tally, the stars, and the tickets feeding out of the slot.
+{
+  const page = await open({ width: 390, height: 844 }, 2);
+  await play(page, [[0, 280, 0], [0, 250, 0], [0, 305, 0], [26, 374, 0], [0, 290, 0], [0, 250, 0], [0, 305, 0], [0, 340, 0]], true);
+  await page.evaluate(() => { rollUp.speed = 1; rollUp.roll(0, 280, 0); });
+  await page.waitForFunction(() => rollUp.mode === 'over', null, { timeout: 20000 });
+  await page.waitForFunction(() => document.getElementById('won').textContent === String(rollUp.saved.daily.won), null, { timeout: 20000 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(root, 'docs/phone-card.png') });
   await page.context().close();
 }
 

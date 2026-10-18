@@ -1,4 +1,4 @@
-// The physics on its own, without a browser:  node --test test/physics.test.mjs
+// The physics and the scoring on their own, without a browser:  node --test test/unit.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, RINGS, HOLES, BOARD, R } from '../js/physics.js';
@@ -60,4 +60,25 @@ test('tickets and prizes', () => {
   const ids = new Set(PRIZES.map(p => p.id));
   assert.equal(ids.size, PRIZES.length, 'prize ids are unique');
   for (let i = 1; i < PRIZES.length; i++) assert.ok(PRIZES[i].cost > PRIZES[i - 1].cost, 'cheapest first');
+});
+
+test("today's card is the same all day, different the next, and fair", async () => {
+  const { cardFor, dayKey, dayBefore, points, shareLine } = await import('../js/daily.js');
+  assert.deepEqual(cardFor('2026-10-18'), cardFor('2026-10-18'), 'everyone gets the same card');
+  assert.notDeepEqual(cardFor('2026-10-18').calls, cardFor('2026-10-19').calls, 'a new card each day');
+  for (let d = 1; d <= 120; d++) {
+    const key = dayKey(new Date(2026, 0, d, 12));
+    const c = cardFor(key);
+    assert.equal(c.calls.length, 9);
+    assert.ok(c.calls.every(v => [20, 30, 40, 50, 100].includes(v)), `${key}: calls ${c.calls}`);
+    assert.ok(c.calls.filter(v => v === 100).length <= 1, `${key}: one 100 at most`);
+    assert.ok(c.golden >= 0 && c.golden < 9);
+  }
+  assert.equal(dayBefore('2026-03-01'), '2026-02-28');
+  assert.equal(dayBefore('2027-01-01'), '2026-12-31');
+  assert.deepEqual(points(40, { call: 40 }), { points: 80, hit: true });
+  assert.deepEqual(points(40, { call: 30, golden: true }), { points: 80, hit: false });
+  assert.deepEqual(points(100, { call: 100, golden: true }), { points: 400, hit: true });
+  assert.deepEqual(points(0, { call: 20, golden: true }), { points: 0, hit: false });
+  assert.equal(shareLine('2026-10-18', 340, [true, false, true]), 'Roll Up · Sun 18 Oct · 340\n★☆★\nroll-up.junkdrawer.works');
 });

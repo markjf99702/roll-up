@@ -25,6 +25,8 @@ const COL = {
   marquee: '#8e1c22', marqueeLo: '#55101a', cream: '#fbeed2',
   bulbOff: '#5b3d24', bulbOn: '#ffd884',
   ball: ['#ff8a72', '#d23a2c', '#7c1612'], stripe: 'rgba(255, 238, 214, .92)',
+  goldBall: ['#fff6c8', '#e9b43a', '#7a4f0c'], goldStripe: 'rgba(122, 60, 8, .7)',
+  call: '94,230,216',
 };
 
 // A tiny seeded random, so the wood grain and the lights in the background come out the same each time.
@@ -440,19 +442,36 @@ export function createScene(canvas) {
   }
 
   // ---------- each frame ----------
-  // view: { ball, tray, lights: { mode, t }, flash: { hole, t }, pops: [{ text, x, y, z, age, big }], charge, now }
+  // view: { ball, tray, trayGold, call, lights: { mode, t }, flash: { hole, t }, pops: [{ text, sub, x, y, z, age, big }], charge, now }
   function frame(view) {
     setZoom(view.zoom || 0);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(bake, DPR * zx, DPR * zy, W * DPR * zk, H * DPR * zk);
     base(ctx);
+    if (view.call) called(view.call, view.now);
     if (view.flash) holeFlash(view.flash);
     lights(view.lights, view.now);
-    trayBalls(view.tray, view.ball);
+    trayBalls(view.tray, view.trayGold);
     const b = view.ball;
     if (b && b.state !== 'done' && !b.hidden) drawBall(b);
     if (view.charge != null && b) chargeMeter(b, view.charge);
     for (const p of view.pops) pop(p);
+  }
+
+  // The called hole (both corners, for a 100) breathes a teal ring.
+  function called(value, now) {
+    const k = 0.5 + 0.5 * Math.sin(now / 260);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const o of HOLES) {
+      if (o.value !== value) continue;
+      path(ctx, circleOnBoard(o.u, o.s, o.r + 0.9 + k * 0.9, 0.3, 40));
+      ctx.lineWidth = Math.max(1.5, P(fromBoard(o.u, o.s, 0)).k * (0.7 + k * 0.4));
+      ctx.strokeStyle = `rgba(${COL.call},${0.55 + k * 0.4})`;
+      ctx.stroke();
+      fillPts(ctx, circleOnBoard(o.u, o.s, o.r, 0.2, 40), `rgba(${COL.call},${0.12 + k * 0.1})`);
+    }
+    ctx.restore();
   }
 
   function holeFlash(f) {
@@ -482,8 +501,8 @@ export function createScene(canvas) {
     ctx.restore();
   }
 
-  function trayBalls(n, ball) {
-    for (let i = 0; i < n; i++) sphere(traySpot(i), null, 1);
+  function trayBalls(n, gold) {
+    for (let i = 0; i < n; i++) sphere(traySpot(i), null, 1, i === gold);
   }
 
   function drawBall(b) {
@@ -510,7 +529,7 @@ export function createScene(canvas) {
       ctx.clip();
     }
     const dark = b.state === 'sinking' ? Math.min(1, b.sinkT / 0.22) : 0;
-    sphere(p, b.spin, 1 - dark * 0.75);
+    sphere(p, b.spin, 1 - dark * 0.75, b.golden);
     ctx.restore();
     // lip pieces nearer than the ball cover it
     if (beyond) {
@@ -536,17 +555,18 @@ export function createScene(canvas) {
     ctx.restore();
   }
 
-  // A shiny red ball with a cream stripe round it, turned by `spin` so it visibly rolls.
-  function sphere(p, spin, bright) {
+  // A shiny red ball (or the golden one) with a stripe round it, turned by `spin` so it visibly rolls.
+  function sphere(p, spin, bright, gold = false) {
     const s = P(p), r = s.k * R;
+    const tone = gold ? COL.goldBall : COL.ball;
     const g = ctx.createRadialGradient(s.x - r * 0.35, s.y - r * 0.4, r * 0.1, s.x, s.y, r);
-    g.addColorStop(0, COL.ball[0]); g.addColorStop(0.45, COL.ball[1]); g.addColorStop(1, COL.ball[2]);
+    g.addColorStop(0, tone[0]); g.addColorStop(0.45, tone[1]); g.addColorStop(1, tone[2]);
     ctx.save();
     ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
     ctx.fillStyle = g; ctx.fill();
     ctx.clip();
     if (spin) {
-      ctx.lineWidth = r * 0.24; ctx.lineCap = 'round'; ctx.strokeStyle = COL.stripe;
+      ctx.lineWidth = r * 0.24; ctx.lineCap = 'round'; ctx.strokeStyle = gold ? COL.goldStripe : COL.stripe;
       ctx.beginPath();
       let pen = false;
       for (let i = 0; i <= 40; i++) {
@@ -570,6 +590,21 @@ export function createScene(canvas) {
     hl.addColorStop(0, 'rgba(255,255,255,.85)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = hl; ctx.fillRect(s.x - r, s.y - r, r * 2, r * 2);
     if (bright < 1) { ctx.fillStyle = `rgba(4,5,11,${1 - bright})`; ctx.fillRect(s.x - r, s.y - r, r * 2, r * 2); }
+    ctx.restore();
+    if (gold && bright === 1) glint(s.x - r * 0.42, s.y - r * 0.5, r);
+  }
+  // a four-pointed sparkle that comes and goes on the golden ball
+  function glint(x, y, r) {
+    const k = Math.max(0, Math.sin(performance.now() / 420)) ** 3;
+    if (k < 0.05) return;
+    const a = r * (0.5 + 0.7 * k), b = a * 0.18;
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.fillStyle = '#fffbe8';
+    ctx.beginPath();
+    ctx.moveTo(x, y - a); ctx.lineTo(x + b, y - b); ctx.lineTo(x + a, y); ctx.lineTo(x + b, y + b);
+    ctx.lineTo(x, y + a); ctx.lineTo(x - b, y + b); ctx.lineTo(x - a, y); ctx.lineTo(x - b, y - b);
+    ctx.closePath(); ctx.fill();
     ctx.restore();
   }
   // Turns v by the unit quaternion q: v + w·t + q × t, where t = 2 (q × v).
@@ -598,10 +633,24 @@ export function createScene(canvas) {
     ctx.globalAlpha = a;
     ctx.font = `400 ${size}px Bungee, Impact, sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // keep it on screen, even over a 100 cup in the corner
+    let wide = ctx.measureText(p.text).width;
+    if (p.sub) { ctx.font = `400 ${size * 0.42}px Bungee, Impact, sans-serif`; wide = Math.max(wide, ctx.measureText(p.sub).width); ctx.font = `400 ${size}px Bungee, Impact, sans-serif`; }
+    const lo = (10 - zx) / zk + wide / 2, hi = (W - 10 - zx) / zk - wide / 2;
+    s.x = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, s.x));
     ctx.lineWidth = Math.max(3, size * 0.16); ctx.strokeStyle = 'rgba(30,8,20,.9)'; ctx.lineJoin = 'round';
     ctx.strokeText(p.text, s.x, s.y - rise - size * 0.6);
     ctx.fillStyle = p.big ? '#ffe28a' : COL.cream;
     ctx.fillText(p.text, s.x, s.y - rise - size * 0.6);
+    if (p.sub) {
+      // what doubled it: the call, the golden ball, or both
+      const small = size * 0.42;
+      ctx.font = `400 ${small}px Bungee, Impact, sans-serif`;
+      ctx.lineWidth = Math.max(2.5, small * 0.22);
+      ctx.strokeText(p.sub, s.x, s.y - rise + small * 0.35);
+      ctx.fillStyle = p.subColor || COL.cream;
+      ctx.fillText(p.sub, s.x, s.y - rise + small * 0.35);
+    }
     ctx.restore();
   }
 
