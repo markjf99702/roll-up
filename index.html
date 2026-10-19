@@ -2,103 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Roll Up</title>
-  <meta name="description" content="Skee-ball on your phone. Flick the ball up the lane, hop the ramp and drop it in the rings. Nine balls a game, tickets for your score, and a prize counter to spend them at.">
-  <meta property="og:title" content="Roll Up">
-  <meta property="og:description" content="Skee-ball on your phone, with tickets and a prize counter.">
-  <meta property="og:image" content="https://roll-up.junkdrawer.works/og.png">
-  <meta property="og:url" content="https://roll-up.junkdrawer.works/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roll Up is at Free Play now</title>
+  <meta name="description" content="Roll Up moved into Free Play, the junkdrawer.works arcade.">
+  <meta property="og:title" content="Roll Up, at Free Play">
+  <meta property="og:description" content="An arcade on your phone: skee-ball, pinball and a prize counter.">
+  <meta property="og:image" content="https://free-play.junkdrawer.works/og.png">
+  <meta property="og:url" content="https://free-play.junkdrawer.works/roll-up/">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="theme-color" content="#100c22">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="preload" href="fonts/bungee.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="canonical" href="https://free-play.junkdrawer.works/roll-up/">
+  <!-- Roll Up lives in the Free Play arcade now. This sends old links and home-screen icons there, keeping anything
+       after the address (a table, say), and Free Play brings the saves over from here (carry.html). -->
+  <script>location.replace('https://free-play.junkdrawer.works/roll-up/' + location.search + location.hash);</script>
+  <meta http-equiv="refresh" content="0; url=https://free-play.junkdrawer.works/roll-up/">
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; text-align: center; background: #0d0b1f; color: #fbeed2; font: 17px/1.5 system-ui, sans-serif; }
+    a { color: #ffd36a; }
+  </style>
 </head>
 <body>
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="ticket" viewBox="0 0 24 16">
-      <path d="M2 2h20v3.6a2.4 2.4 0 0 0 0 4.8V14H2v-3.6a2.4 2.4 0 0 0 0-4.8z" fill="#f2944e"/>
-      <path d="M8 3.5v9" stroke="#fbeed2" stroke-width="1" stroke-dasharray="1.4 1.2"/>
-      <circle cx="15" cy="8" r="2.6" fill="#fbeed2"/>
-    </symbol>
-  </svg>
-
-  <canvas id="stage" aria-label="A skee-ball lane: the ball at your end, a ramp, and a board of rings worth 10 to 50, with 100s in the top corners"></canvas>
-
-  <header class="hud">
-    <div class="score"><small id="ballNo">Ball 1 of 9</small><b id="score">0</b></div>
-    <div class="right">
-      <button type="button" class="tix" id="tixBtn" aria-label="Prize counter"><svg><use href="#ticket"/></svg><span id="tix">0</span></button>
-      <button type="button" class="menu" id="menuBtn" aria-label="Menu"><span></span><span></span><span></span></button>
-    </div>
-  </header>
-  <p class="hint" id="hint" hidden>Drag the ball, then flick it up the lane</p>
-  <p class="upright" aria-hidden="true">Roll Up plays best with your phone upright</p>
-  <p class="sr" id="live" aria-live="polite"></p>
-
-  <section class="card" id="title">
-    <div class="marquee"><h1>Roll Up</h1></div>
-    <p class="lede">Skee-ball, the boardwalk kind. Nine balls a game, and a ticket for every 10 points.</p>
-    <p class="how">Drag the ball where you want it and flick it up the lane. It hops the ramp and drops into a ring. Harder isn't better: the 50 wants a medium roll, and the 100s want an angle.</p>
-    <div class="row">
-      <button type="button" class="big" id="play">Play</button>
-      <button type="button" class="plain" id="toPrizes"><svg><use href="#ticket"/></svg>Prize counter</button>
-    </div>
-    <p class="best" id="titleBest"></p>
-    <footer class="jd-foot">
-      <a href="https://junkdrawer.works/">Part of junkdrawer.works</a>
-      <span aria-hidden="true">·</span>
-      <a href="https://junkdrawer.works/privacy.html">Privacy</a>
-    </footer>
-  </section>
-
-  <section class="card" id="over" hidden>
-    <h2 id="overT">Nine balls, 0 points</h2>
-    <p class="tally" id="tally" aria-label="Each ball's score"></p>
-    <p class="won"><svg><use href="#ticket"/></svg><b id="won">0</b> <span id="wonWord">tickets</span></p>
-    <p class="best" id="overBest"></p>
-    <div class="row">
-      <button type="button" class="big" id="again">Roll again</button>
-      <button type="button" class="plain" id="overPrizes"><svg><use href="#ticket"/></svg>Prize counter</button>
-    </div>
-  </section>
-
-  <section class="card" id="menu" hidden>
-    <h2>Paused</h2>
-    <div class="col">
-      <button type="button" class="big" id="resume">Keep playing</button>
-      <button type="button" class="plain" id="restart">Start a new game</button>
-      <button type="button" class="plain" id="menuPrizes"><svg><use href="#ticket"/></svg>Prize counter</button>
-      <button type="button" class="plain" id="sound" aria-pressed="true">Sound: on</button>
-    </div>
-    <p class="how">On a keyboard: ← and → move the ball, hold Space to wind up, let go to roll.</p>
-    <footer class="jd-foot">
-      <a href="https://junkdrawer.works/">Part of junkdrawer.works</a>
-      <span aria-hidden="true">·</span>
-      <a href="https://junkdrawer.works/privacy.html">Privacy</a>
-    </footer>
-  </section>
-
-  <section class="sheet" id="prizes" hidden aria-labelledby="prizesT">
-    <div class="sheet-in">
-      <div class="sheet-head">
-        <h2 id="prizesT">Prize counter</h2>
-        <span class="bal"><svg><use href="#ticket"/></svg><b id="bal">0</b> tickets</span>
-        <button type="button" class="x" id="closePrizes" aria-label="Close">×</button>
-      </div>
-      <h3>Your shelf</h3>
-      <div class="shelf" id="shelf"></div>
-      <h3>Trade your tickets</h3>
-      <div class="grid" id="grid"></div>
-    </div>
-    <p class="toast" id="toast" hidden></p>
-  </section>
-
-  <noscript><p class="noscript">Roll Up needs JavaScript to roll the ball.</p></noscript>
-  <script type="module" src="js/app.js"></script>
+  <p>Roll Up is in the Free Play arcade now.<br><a href="https://free-play.junkdrawer.works/roll-up/">Go to Roll Up</a></p>
 </body>
 </html>
